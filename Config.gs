@@ -8,13 +8,13 @@ const CONFIG = {
   // 1. SYSTEM STRUCTURE (Folders, Templates, Permanent Sheets)
   // ===========================================================================
   // The folder where new trip sheets are built/stored
-  FOLDER_ID_BUILD: "1_3jh60_8SsWHKu69EP50johgnvzEq-sG",
+  FOLDER_ID_BUILD: "PLACEHOLDER",
   
   // The folder where finalised/approved archives are stored
-  FOLDER_ID_ARCHIVE: "1xz5FSwWxYYQsUtsnhOkPDvhXHxS3LeFb",
+  FOLDER_ID_ARCHIVE: "PLACEHOLDER",
   
   // The Master Template ID used to create Archives
-  ARCHIVE_TEMPLATE_ID: "1va96BaQAgws7Px_EXyxyVcAbVSRv5QcP_gj5oInw4ks",
+  ARCHIVE_TEMPLATE_ID: "PLACEHOLDER",
 
   // Permanent System Sheets (Do not delete these from the spreadsheet)
   SYSTEM_LOG_SHEET_NAME: "log",           // Global logging tab
@@ -65,6 +65,6 @@ const CONFIG = {
   // ===========================================================================
   // 5. PERMISSIONS & SYSTEM ADMIN
   // ===========================================================================
-  SYSTEM_ADMIN_BCC: "jappleton@csg.school",
-  SYSTEM_TESTERS: ["jappleton@csg.school", "tnayagam@csg.school"]
+  SYSTEM_ADMIN_BCC: "person1@example.com",
+  SYSTEM_TESTERS: ["person1@example.com", "person2@example.com"]
 };
