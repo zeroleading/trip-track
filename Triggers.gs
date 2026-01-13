@@ -19,6 +19,8 @@ function onOpen(e) {
     .addSeparator()
     .addItem('Force Notifications (Manual)', 'forceTripNotifications')
     .addSeparator()
+    .addItem('View Evaluation', 'viewTripEvaluation')
+    .addSeparator()
     .addSubMenu(ui.createMenu('⚠️ Testing Area')
         .addItem('Test: Request Authorisation', 'test_RequestAuth')
         .addItem('Test: Approval Email', 'test_ApproveTrip')
@@ -28,8 +30,11 @@ function onOpen(e) {
         .addItem('Test: T-4 Operations (Att/Cov)', 'test_T4')
         .addItem('Test: T-1 Leader Pack', 'test_T1')
         .addItem('Test: T-0 Reminder', 'test_T0')
+        .addItem('Test: T+1 Evaluations', 'test_Evaluation')
         .addSeparator()
-        .addItem('🔴 Test: Run ALL Tests', 'test_RunAll'))
+        .addItem('🔴 Test: Run ALL Email Tests', 'test_RunAllEmails')
+        .addSeparator()
+        .addItem('Add dummy evaluation (for testing)', 'test_SeedDummyResponse'))
     .addToUi();
 }
 
