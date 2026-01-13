@@ -1,5 +1,5 @@
 /**
- * MESSAGE TESTING SUITE (v4.2)
+ * MESSAGE TESTING SUITE
  * Allows the current user to trigger email notifications to THEMSELVES only.
  * RESTRICTED: Only runs for System Admins or SLT members.
  */
@@ -8,7 +8,7 @@
 // MASTER TEST
 // =============================================================================
 
-function test_RunAll() {
+function test_RunAllEmails() {
   const ui = SpreadsheetApp.getUi();
   
   // Security Check
@@ -22,7 +22,7 @@ function test_RunAll() {
 
   const confirm = ui.alert(
     "Run All Tests?", 
-    "This will send 7 separate emails to your inbox representing the full trip lifecycle.\n\nProceed?", 
+    "This will send 8 separate emails to your inbox representing the full trip lifecycle.\n\nProceed?", 
     ui.ButtonSet.YES_NO
   );
   if (confirm !== ui.Button.YES) return;
@@ -33,9 +33,10 @@ function test_RunAll() {
   test_T7();          Utilities.sleep(500);
   test_T4();          Utilities.sleep(500);
   test_T1();          Utilities.sleep(500);
-  test_T0();
+  test_T0();          Utilities.sleep(500);
+  test_EvaluationEmail();
 
-  ui.alert("All 7 test emails have been queued/sent.");
+  ui.alert("All 8 test emails have been queued/sent.");
 }
 
 // =============================================================================
@@ -295,6 +296,103 @@ function test_T0() {
   `;
 
   sendTestEmail(userEmail, "Attendance Officer", subject, emailBody);
+}
+
+/**
+ * TEST: T+1 Evaluation Email
+ * Simulates the email sent to the Trip Leader the day after the trip.
+ * Uses the configuration from Config.gs to generate the pre-filled link.
+ */
+function test_EvaluationEmail() {
+  // Dependencies from Testing.gs
+  if (typeof getTestData !== 'function') {
+    SpreadsheetApp.getUi().alert("Error: 'Testing.gs' functions (getTestData) not found.");
+    return;
+  }
+
+  const { sheet, tripData, userEmail } = getTestData();
+  if (!sheet) return;
+
+  // 1. Construct Link
+  const formUrl = CONFIG.FORM_EVALUATION_URL;
+  const entryId = CONFIG.FORM_ENTRY_ID_TRIP_REF;
+  const preFilledUrl = `${formUrl}?usp=pp_url&${entryId}=${tripData.trip_ref}`;
+
+  // 2. Prepare Email Content
+  const subject = `[TEST] Trip Evaluation Required: ${tripData.trip_name} (${tripData.trip_ref})`;
+  
+  const body = `
+    <h3>T+1 Evaluation Request</h3>
+    <p>This is a test of the email sent to the Trip Leader 1 day after return.</p>
+    
+    <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #4285f4;">
+      <p>Hi there,</p>
+      <p>We hope the trip "${tripData.trip_name}" went well yesterday.</p>
+      <p>Please take 2 minutes to complete the mandatory evaluation form.</p>
+      <p><a href="${preFilledUrl}"><b>Click Here to Complete Evaluation</b></a></p>
+      <p style="font-size: 11px; color: #666;">(Link pre-filled with Ref: ${tripData.trip_ref})</p>
+    </div>
+  `;
+
+  // 3. Send
+  if (typeof sendTestEmail === 'function') {
+    sendTestEmail(userEmail, "Trip Leader", subject, body);
+  } else {
+    MailApp.sendEmail({ to: userEmail, subject: subject, htmlBody: body });
+    SpreadsheetApp.getActiveSpreadsheet().toast("Test Email Sent");
+  }
+}
+
+// =============================================================================
+// ADDS DUMMY EVALUATION
+// =============================================================================
+
+function test_SeedDummyResponse() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const sheet = ss.getActiveSheet();
+  
+  // 1. Get Current Trip Ref
+  const tripRef = sheet.getName();
+  if (!tripRef.match(/^\d{4}T\d{2}$/)) {
+    ui.alert("Run this from a valid Trip Sheet.");
+    return;
+  }
+
+  // 2. Get Response Sheet
+  const responseSheet = ss.getSheetByName(CONFIG.FORM_RESPONSES_SHEET_NAME);
+  if (!responseSheet) {
+    ui.alert(`Response sheet '${CONFIG.FORM_RESPONSES_SHEET_NAME}' not found.`);
+    return;
+  }
+
+  // 3. Construct Dummy Row
+  // We need to ensure the Trip Ref lands in the correct column (CONFIG.FORM_COL_INDEX_REF)
+  // Arrays are 0-indexed, so we create an array large enough.
+  const colIndex = CONFIG.FORM_COL_INDEX_REF; // e.g. 2 for Column C
+  
+  const dummyRow = [];
+  // Fill up to the target column with empty strings
+  for (let i = 0; i < colIndex; i++) {
+    dummyRow.push(""); 
+  }
+  
+  // Set specific values
+  dummyRow[0] = new Date(); // Timestamp (usually Col A / Index 0)
+  dummyRow[1] = "test@example.com";
+  dummyRow[colIndex] = tripRef; // The Trip Ref
+  
+  // Add some dummy answers after the ref
+  dummyRow.push("Yes"); // Successfully concluded?
+  dummyRow.push("Yes"); // Incidents of note?
+  dummyRow.push("Delays due to the wrong leaves on the students."); // Description of incident(s)
+  dummyRow.push("Conduct the trip in Spring."); // Changes next time?
+  dummyRow.push("The leaves were a vibrant, descending kaleidoscope of amber, russet and gold, dancing in a crisp breeze before forming a whispering, crunching carpet of fiery color. But they got in the way!"); // Comments?
+
+  // 4. Append
+  responseSheet.appendRow(dummyRow);
+  
+  ui.alert("Success", `Dummy evaluation added for ${tripRef}.\n\nYou can now test 'Trip Admin > View Evaluation'.`, ui.ButtonSet.OK);
 }
 
 // =============================================================================
