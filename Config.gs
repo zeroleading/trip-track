@@ -8,13 +8,13 @@ const CONFIG = {
   // 1. SYSTEM STRUCTURE (Folders, Templates, Permanent Sheets)
   // ===========================================================================
   // The folder where new trip sheets are built/stored
-  FOLDER_ID_BUILD: "PLACEHOLDER",
+  FOLDER_ID_BUILD: "1_3jh60_8SsWHKu69EP50johgnvzEq-sG",
   
   // The folder where finalised/approved archives are stored
-  FOLDER_ID_ARCHIVE: "PLACEHOLDER",
+  FOLDER_ID_ARCHIVE: "1xz5FSwWxYYQsUtsnhOkPDvhXHxS3LeFb",
   
   // The Master Template ID used to create Archives
-  ARCHIVE_TEMPLATE_ID: "PLACEHOLDER",
+  ARCHIVE_TEMPLATE_ID: "1va96BaQAgws7Px_EXyxyVcAbVSRv5QcP_gj5oInw4ks",
 
   // Permanent System Sheets (Do not delete these from the spreadsheet)
   SYSTEM_LOG_SHEET_NAME: "log",           // Global logging tab
@@ -65,6 +65,21 @@ const CONFIG = {
   // ===========================================================================
   // 5. PERMISSIONS & SYSTEM ADMIN
   // ===========================================================================
-  SYSTEM_ADMIN_BCC: "person1@example.com",
-  SYSTEM_TESTERS: ["person1@example.com", "person2@example.com"]
+  SYSTEM_ADMIN_BCC: "jappleton@csg.school",
+  SYSTEM_TESTERS: ["jappleton@csg.school", "tnayagam@csg.school"],
+
+  // ===========================================================================
+  // 6. EVALUATION SYSTEM
+  // ===========================================================================
+  // The link you send to users (The "View Form" link, not the "Edit" link)
+  FORM_EVALUATION_URL: "https://docs.google.com/forms/d/e/1FAIpQLSfqL2ZH_YnGEdjKAU2g1JZa4rWclwDqoOhrtKfrxpROE-h1Rg/viewform",
+  
+  // The 'entry.xxxx' ID for the Trip Reference field (Get this from 'Get Pre-filled Link')
+  FORM_ENTRY_ID_TRIP_REF: "entry.1774006491", 
+  
+  // The destination sheet where form answers land
+  FORM_RESPONSES_SHEET_NAME: "evaluation",
+  
+  // The zero-indexed column number in the Responses sheet holding the Trip Ref (2 = Column C).
+  FORM_COL_INDEX_REF: 2 
 };
