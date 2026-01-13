@@ -1,6 +1,6 @@
 /**
- * WORKFLOW TIME-BASED (v4.2 - Date Fix Applied)
- * Handles T-Minus Automated checks (T-7, T-4, T-1, T-0).
+ * WORKFLOW TIME-BASED
+ * Handles T-Minus Automated checks (T-7, T-4, T-1, T-0, T+1).
  * Includes Duplicate Prevention, PDF Generation, Manual Force.
  * UPDATED: Fixed "dd/MM/yyyy" parsing issue for non-US locales.
  */
@@ -55,6 +55,9 @@ function runDailyChecks() {
       case 0:
         if (!tripData.trip_sentDeparture) sendT0_AttendanceReminder(sheet, tripData);
         break;
+      case -1:
+        if (!tripData.trip_sentEvaluation) sendTPlus1_Evaluation(sheet, tripData);
+        break;
     }
   });
 }
@@ -80,7 +83,8 @@ function forceTripNotifications() {
     "• 7  = Lock-in Reminder (Lead)\n" +
     "• 4  = Operations Lists (Att/Cover)\n" +
     "• 1  = Leader Pack (Lead)\n" +
-    "• 0  = Departure Reminder (Att)\n",
+    "• 0  = Departure Reminder (Att)\n" +
+    "• -1 = Evaluation Request (Lead)\n",
     ui.ButtonSet.OK_CANCEL
   );
 
@@ -109,8 +113,14 @@ function forceTripNotifications() {
         ui.alert("T-0 (Departure) forced successfully.");
         logToSystem("Manual Force", tripData.trip_ref, "User forced T-0 Notification");
         break;
+      case "-1":
+        // Updated to pass the full tripData object as requested
+        sendTPlus1_Evaluation(sheet, tripData);
+        ui.alert("T+1 (Evaluation) forced successfully.");
+        logToSystem("Manual Force", tripData.trip_ref, "User forced T+1 Notification");
+        break;
       default:
-        ui.alert("Invalid input. Please enter 7, 4, 1, or 0.");
+        ui.alert("Invalid input. Please enter 7, 4, 1, 0, or -1.");
     }
   } catch (e) {
     ui.alert("Error forcing notification: " + e.message);
@@ -327,6 +337,45 @@ function sendT0_AttendanceReminder(sheet, tripData) {
   
   updateSummaryValue(sheet, 'trip_sentDeparture', new Date());
   logToSystem("T-0 Check", tripData.trip_ref, "Departure reminder sent");
+}
+
+/**
+ * FIXED: Now accepts tripData object to match the calls from runDailyChecks and forceTripNotifications.
+ */
+function sendTPlus1_Evaluation(sheet, tripData) {
+  // Optimization: Use data already in memory instead of slow getValue() calls
+  const leaderEmail = tripData.trip_leadEmail;
+  const tripName = tripData.trip_name;
+  const tripRef = tripData.trip_ref;
+
+  if (!leaderEmail) {
+    Logger.log(`Skipping email for ${tripRef}: No leader email found.`);
+    return;
+  }
+
+  // Build Pre-filled URL
+  const formUrl = `${CONFIG.FORM_EVALUATION_URL}?usp=pp_url&${CONFIG.FORM_ENTRY_ID_TRIP_REF}=${tripRef}`;
+
+  const subject = `Trip Evaluation Required: ${tripName} (${tripRef})`;
+  const body = `
+    Hi there,
+    
+    We hope the trip "${tripName}" went well yesterday.
+    
+    Please take 2 minutes to complete the mandatory evaluation form.
+    Click the link below (Reference number is already filled in for you):
+    
+    ${formUrl}
+  `;
+
+  MailApp.sendEmail({
+    to: leaderEmail,
+    subject: subject,
+    body: body
+  });
+  
+  updateSummaryValue(sheet, 'trip_sentEvaluation', new Date());
+  logToSystem("T+1 Evaluation", tripRef, "Evaluation form sent");
 }
 
 // =============================================================================
