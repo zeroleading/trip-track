@@ -55,6 +55,7 @@ function addTrip() {
   }
 
   // 4. Generate and add new reference number.
+  // Note: Assumes generateAndAddReferenceNumber() exists in your project
   const generatedTripReference = generateAndAddReferenceNumber();
   if (!generatedTripReference) {
     return; // Error was already handled in the helper
@@ -62,6 +63,16 @@ function addTrip() {
 
   // 5. Create new sheet
   const newTripSheet = templateSheet.copyTo(ss).setName(generatedTripReference);
+
+  // --- ADDED: Move Sheet Logic ---
+  // Moves the new sheet to index immediately following the Menu sheet
+  const menuSheet = ss.getSheetByName(CONFIG.MENU_SHEET_NAME);
+  if (menuSheet) {
+    newTripSheet.activate();
+    ss.moveActiveSheet(menuSheet.getIndex() + 1);
+  }
+  // -------------------------------
+
   let newTripSheetProtection = newTripSheet.protect();
 
   // 6. Populate data
