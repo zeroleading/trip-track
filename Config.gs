@@ -17,6 +17,7 @@ const CONFIG = {
   ARCHIVE_TEMPLATE_ID: "1va96BaQAgws7Px_EXyxyVcAbVSRv5QcP_gj5oInw4ks",
 
   // Permanent System Sheets (Do not delete these from the spreadsheet)
+  MENU_SHEET_NAME: "menu",                // Main Dashboard/Menu tab
   SYSTEM_LOG_SHEET_NAME: "log",           // Global logging tab
   TEMPLATE_SHEET_NAME: "0000T00",         // Master Trip Template tab
 
@@ -81,5 +82,14 @@ const CONFIG = {
   FORM_RESPONSES_SHEET_NAME: "evaluation",
   
   // The zero-indexed column number in the Responses sheet holding the Trip Ref (2 = Column C).
-  FORM_COL_INDEX_REF: 2 
+  FORM_COL_INDEX_REF: 2,
+
+  // ===========================================================================
+  // 7. DOCUMENTATION LINKS
+  // ===========================================================================
+  // The label in Column A of the Summary Table where links will be stored.
+  SUMMARY_KEY_DOCS: "trip_linkedDocs",
+
+  // Delimiter for multiple links. Use "\n" for new line.
+  SUMMARY_DOCS_DELIMITER: "\n"
 };
