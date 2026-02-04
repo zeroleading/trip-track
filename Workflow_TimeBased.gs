@@ -1,6 +1,6 @@
 /**
- * WORKFLOW TIME-BASED
- * Handles T-Minus Automated checks (T-7, T-4, T-1, T-0, T+1).
+ * WORKFLOW TIME-BASED (v4.2 - Date Fix Applied)
+ * Handles T-Minus Automated checks (T-7, T-4, T-1, T-0).
  * Includes Duplicate Prevention, PDF Generation, Manual Force.
  * UPDATED: Fixed "dd/MM/yyyy" parsing issue for non-US locales.
  */
@@ -83,8 +83,7 @@ function forceTripNotifications() {
     "• 7  = Lock-in Reminder (Lead)\n" +
     "• 4  = Operations Lists (Att/Cover)\n" +
     "• 1  = Leader Pack (Lead)\n" +
-    "• 0  = Departure Reminder (Att)\n" +
-    "• -1 = Evaluation Request (Lead)\n",
+    "• 0  = Departure Reminder (Att)\n",
     ui.ButtonSet.OK_CANCEL
   );
 
@@ -113,14 +112,8 @@ function forceTripNotifications() {
         ui.alert("T-0 (Departure) forced successfully.");
         logToSystem("Manual Force", tripData.trip_ref, "User forced T-0 Notification");
         break;
-      case "-1":
-        // Updated to pass the full tripData object as requested
-        sendTPlus1_Evaluation(sheet, tripData);
-        ui.alert("T+1 (Evaluation) forced successfully.");
-        logToSystem("Manual Force", tripData.trip_ref, "User forced T+1 Notification");
-        break;
       default:
-        ui.alert("Invalid input. Please enter 7, 4, 1, 0, or -1.");
+        ui.alert("Invalid input. Please enter 7, 4, 1, or 0.");
     }
   } catch (e) {
     ui.alert("Error forcing notification: " + e.message);
@@ -339,14 +332,9 @@ function sendT0_AttendanceReminder(sheet, tripData) {
   logToSystem("T-0 Check", tripData.trip_ref, "Departure reminder sent");
 }
 
-/**
- * FIXED: Now accepts tripData object to match the calls from runDailyChecks and forceTripNotifications.
- */
-function sendTPlus1_Evaluation(sheet, tripData) {
-  // Optimization: Use data already in memory instead of slow getValue() calls
-  const leaderEmail = tripData.trip_leadEmail;
-  const tripName = tripData.trip_name;
-  const tripRef = tripData.trip_ref;
+function sendTPlus1_Evaluation(sheet, tripRef) {
+  const leaderEmail = sheet.getRange(CONFIG.RANGE_LEADER_EMAIL).getValue();
+  const tripName = sheet.getRange(CONFIG.RANGE_TRIP_NAME).getValue();
 
   if (!leaderEmail) {
     Logger.log(`Skipping email for ${tripRef}: No leader email found.`);
@@ -375,7 +363,7 @@ function sendTPlus1_Evaluation(sheet, tripData) {
   });
   
   updateSummaryValue(sheet, 'trip_sentEvaluation', new Date());
-  logToSystem("T+1 Evaluation", tripRef, "Evaluation form sent");
+  logToSystem("T+1 Evaluation", tripData.trip_ref, "Evaluation form sent");
 }
 
 // =============================================================================
