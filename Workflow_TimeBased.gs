@@ -83,7 +83,8 @@ function forceTripNotifications() {
     "• 7  = Lock-in Reminder (Lead)\n" +
     "• 4  = Operations Lists (Att/Cover)\n" +
     "• 1  = Leader Pack (Lead)\n" +
-    "• 0  = Departure Reminder (Att)\n",
+    "• 0  = Departure Reminder (Att)\n" +
+    "• -1 = Evaluation Request (Lead)\n", // ADDED THIS LINE
     ui.ButtonSet.OK_CANCEL
   );
 
@@ -112,8 +113,16 @@ function forceTripNotifications() {
         ui.alert("T-0 (Departure) forced successfully.");
         logToSystem("Manual Force", tripData.trip_ref, "User forced T-0 Notification");
         break;
+      // --- ADDED THIS CASE ---
+      case "-1":
+        // Ensure you have updated sendTPlus1_Evaluation to accept (sheet, tripData) per my previous response!
+        sendTPlus1_Evaluation(sheet, tripData);
+        ui.alert("T+1 (Evaluation) forced successfully.");
+        logToSystem("Manual Force", tripData.trip_ref, "User forced T+1 Notification");
+        break;
+      // -----------------------
       default:
-        ui.alert("Invalid input. Please enter 7, 4, 1, or 0.");
+        ui.alert("Invalid input. Please enter 7, 4, 1, 0, or -1.");
     }
   } catch (e) {
     ui.alert("Error forcing notification: " + e.message);
@@ -332,37 +341,53 @@ function sendT0_AttendanceReminder(sheet, tripData) {
   logToSystem("T-0 Check", tripData.trip_ref, "Departure reminder sent");
 }
 
-function sendTPlus1_Evaluation(sheet, tripRef) {
-  const leaderEmail = sheet.getRange(CONFIG.RANGE_LEADER_EMAIL).getValue();
-  const tripName = sheet.getRange(CONFIG.RANGE_TRIP_NAME).getValue();
+function sendTPlus1_Evaluation(sheet, tripData) {
+  // 1. STANDARDISATION: Use tripData properties instead of reading the sheet again
+  const leaderEmail = tripData.trip_leadEmail;
+  const tripName = tripData.trip_name;
+  const tripRef = tripData.trip_ref;
 
+  // Safety Check
   if (!leaderEmail) {
-    Logger.log(`Skipping email for ${tripRef}: No leader email found.`);
+    console.warn(`Skipping T+1 email for ${tripRef}: No leader email found.`);
+    return;
+  }
+
+  // 2. CONFIG DEPENDENCY: Ensure your Config has the URL and Entry ID keys
+  // If these are missing in Config.gs, this will still error, but cleanly.
+  const baseUrl = CONFIG.FORM_EVALUATION_URL; 
+  const entryId = CONFIG.FORM_ENTRY_ID_TRIP_REF;
+
+  if (!baseUrl || !entryId) {
+    console.error("Missing Form Configuration (URL or Entry ID)");
     return;
   }
 
   // Build Pre-filled URL
-  const formUrl = `${CONFIG.FORM_EVALUATION_URL}?usp=pp_url&${CONFIG.FORM_ENTRY_ID_TRIP_REF}=${tripRef}`;
+  // We use encodeURIComponent to ensure special characters in the ref don't break the link
+  const formUrl = `${baseUrl}?usp=pp_url&${entryId}=${encodeURIComponent(tripRef)}`;
 
   const subject = `Trip Evaluation Required: ${tripName} (${tripRef})`;
+  
+  // 3. CONSISTENCY: Use HTML Body like the other emails
   const body = `
-    Hi there,
-    
-    We hope the trip "${tripName}" went well yesterday.
-    
-    Please take 2 minutes to complete the mandatory evaluation form.
-    Click the link below (Reference number is already filled in for you):
-    
-    ${formUrl}
+    <h3>Trip Evaluation Required</h3>
+    <p>Hi there,</p>
+    <p>We hope the trip <b>"${tripName}"</b> went well yesterday.</p>
+    <p>Please take 2 minutes to complete the mandatory evaluation form.</p>
+    <p><a href="${formUrl}"><b>Click here to complete the evaluation</b></a></p>
+    <p>(The Trip Reference <b>${tripRef}</b> has been pre-filled for you).</p>
   `;
 
   MailApp.sendEmail({
     to: leaderEmail,
     subject: subject,
-    body: body
+    htmlBody: body // Changed to htmlBody for consistency
   });
   
   updateSummaryValue(sheet, 'trip_sentEvaluation', new Date());
+  
+  // Now tripData is defined in scope, so this works
   logToSystem("T+1 Evaluation", tripData.trip_ref, "Evaluation form sent");
 }
 
