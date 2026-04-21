@@ -60,6 +60,8 @@ function searchDriveFiles(query) {
  * SERVER-SIDE: Attaches the selected file link to the Summary Table.
  * Uses the delimiter defined in Config to append to existing data.
  * ATTEMPTS to grant view permissions to System Testers & SLT.
+ * @param {Object} fileData - The file details from the frontend.
+ * @return {Object} Response payload containing success message and optional warning.
  */
 function attachDriveFileToSheet(fileData) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -96,7 +98,8 @@ function attachDriveFileToSheet(fileData) {
   range.setNote(currentNote ? currentNote + "\n" + newNote : newNote);
 
   // 4. AUTOMATIC PERMISSIONS
-  // Attempt to share the file with System Testers and the selected SLT
+  let warningMsg = null;
+  
   try {
     const file = DriveApp.getFileById(fileData.id);
     
@@ -104,7 +107,6 @@ function attachDriveFileToSheet(fileData) {
     const viewersToTx = [...(CONFIG.SYSTEM_TESTERS || [])];
 
     // Get SLT Approver from the current sheet
-    // We check if the named range exists on this sheet to avoid errors
     const sltRange = sheet.getRange(CONFIG.SLT_SELECTED_RANGE_NAME);
     if (sltRange) {
       const sltEmail = sltRange.getValue();
@@ -121,12 +123,60 @@ function attachDriveFileToSheet(fileData) {
     }
     
   } catch (e) {
-    // We catch errors here silently (or log them) so the user doesn't see a crash 
-    // if they don't have permission to share the file (e.g. they are not the owner).
+    // The Why: If the user lacks sharing rights, we catch the error to prevent a crash, 
+    // alert them on the frontend, and email them a persistent reminder to ask the owner.
     console.warn(`Could not update permissions for ${fileData.name}: ${e.message}`);
+    
+    // Re-declare uniqueViewers logic purely for the warning message generation
+    const viewersToTx = [...(CONFIG.SYSTEM_TESTERS || [])];
+    const sltRange = sheet.getRange(CONFIG.SLT_SELECTED_RANGE_NAME);
+    if (sltRange) {
+      const sltEmail = sltRange.getValue();
+      if (sltEmail && String(sltEmail).includes("@")) viewersToTx.push(String(sltEmail));
+    }
+    const uniqueViewers = [...new Set(viewersToTx)];
+    
+    // The Why: Attempt to determine who the user should ask for access.
+    // Files in Shared Drives might not return an owner, so we fall back to editors.
+    let whoToAsk = "the document owner or administrator";
+    try {
+      const owner = file.getOwner();
+      if (owner) {
+        whoToAsk = owner.getEmail();
+      } else {
+        const editors = file.getEditors();
+        if (editors && editors.length > 0) {
+          whoToAsk = editors.map(ed => ed.getEmail()).join(', ');
+        }
+      }
+    } catch (ownerErr) {
+      console.warn("Could not retrieve file owner/editors: " + ownerErr.message);
+    }
+
+    // The Why: Send a reminder email to the user so they have a persistent to-do ticket.
+    const currentUserEmail = Session.getActiveUser().getEmail();
+    const subject = `Action Required: Document Sharing Reminder (${fileData.name})`;
+    const body = `Hello,\n\nYou recently attached the document "${fileData.name}" to the Trip Summary.\n\n` +
+                 `However, you do not have the required permissions to automatically share this file. ` + 
+                 `Please ask ${whoToAsk} to grant View access to the following required accounts:\n\n` +
+                 `${uniqueViewers.join('\n')}\n\n` +
+                 `Document Link: ${fileData.url}\n\n` +
+                 `Thank you.`;
+    
+    try {
+      MailApp.sendEmail(currentUserEmail, subject, body);
+    } catch (mailErr) {
+      console.warn("Failed to send reminder email: " + mailErr.message);
+    }
+    
+    warningMsg = `You do not have permission to auto-share this file. A reminder email has been sent to you. Please ask ${whoToAsk} to grant View access to: ${uniqueViewers.join(', ')}`;
   }
   
-  return `Attached! Cell now contains ${newVal.split(delimiter).length} link(s).`;
+  // The Why: Returning an object allows the frontend to distinguish between a perfect success and a success with caveats.
+  return {
+    message: `Attached! Cell now contains ${newVal.split(delimiter).length} link(s).`,
+    warning: warningMsg
+  };
 }
 
 /**
@@ -318,6 +368,9 @@ const PICKER_HTML_CONTENT = `
       #message { margin-top: 15px; border-radius: 6px; padding: 8px; font-size: 12px; display: none; }
       .error { color: #b91c1c; background: #fef2f2; border: 1px solid #fca5a5; display: block !important; }
       .success { color: #15803d; background: #f0fdf4; border: 1px solid #86efac; font-weight: 600; display: block !important; }
+      
+      /* The Why: Added a specific warning class to distinguish from standard success/error states */
+      .warning { color: #9a3412; background: #fff7ed; border: 1px solid #fed7aa; display: block !important; white-space: pre-wrap; line-height: 1.4; }
     </style>
   </head>
   <body>
@@ -393,10 +446,18 @@ const PICKER_HTML_CONTENT = `
         document.getElementById('results-container').style.display = 'none';
         
         google.script.run
-          .withSuccessHandler(function(msg) {
+          .withSuccessHandler(function(res) {
              document.getElementById('spinner').style.display = 'none';
-             showMessage("✅ " + msg, "success");
-             setTimeout(function() { google.script.host.close(); }, 2000);
+             
+             // The Why: We check if the server returned a warning property
+             if (res.warning) {
+                 showMessage("✅ " + res.message + "\\n\\n⚠️ Action Required: " + res.warning, "warning");
+                 // The Why: Extend the timeout so the user actually has time to read the longer message
+                 setTimeout(function() { google.script.host.close(); }, 8000);
+             } else {
+                 showMessage("✅ " + res.message, "success");
+                 setTimeout(function() { google.script.host.close(); }, 2000);
+             }
           })
           .withFailureHandler(showError)
           .attachDriveFileToSheet(file);

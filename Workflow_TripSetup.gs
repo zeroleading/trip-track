@@ -162,10 +162,3 @@ function generateAndAddReferenceNumber() {
 
   return newGeneratedReference;
 }
-
-/**
- * PLACEHOLDER: For the 'View previous trips' menu item.
- */
-function viewPrevious() {
-  SpreadsheetApp.getUi().alert("This function ('viewPrevious') is not yet implemented.");
-}

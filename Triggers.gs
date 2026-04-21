@@ -11,7 +11,6 @@ function onOpen(e) {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Trip Admin')
     .addItem('Add new trip', 'addTrip')
-    .addItem('View previous trips', 'viewPrevious')
     .addSeparator()
     .addItem('1. Request Authorisation', 'requestAuthorisation')
     .addItem('2. Approve This Trip (SLT)', 'approveTripWorkflow')
