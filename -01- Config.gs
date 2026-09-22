@@ -73,7 +73,7 @@ const CONFIG = {
   // 6. EVALUATION SYSTEM
   // ===========================================================================
   // The link you send to users (The "View Form" link, not the "Edit" link)
-  FORM_EVALUATION_URL: "https://docs.google.com/forms/d/e/1FAIpQLSfqL2ZH_YnGEdjKAU2g1JZa4rWclwDqoOhrtKfrxpROE-h1Rg/viewform",
+  FORM_EVALUATION_URL: "https://docs.google.com/forms/d/e/1FAIpQLSeiP_2bRkXzXNQZp3C-3NRoP4QxUBDuXnIbpTe0GUnBMKEQaA/viewform",
   
   // The 'entry.xxxx' ID for the Trip Reference field (Get this from 'Get Pre-filled Link')
   FORM_ENTRY_ID_TRIP_REF: "entry.1774006491", 
