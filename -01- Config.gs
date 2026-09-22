@@ -1,7 +1,7 @@
 /**
  * CONFIGURATION FILE
  * Centralises all hardcoded IDs, named ranges, and status logic.
- * Organized for ease of maintenance.
+ * Organised for ease of maintenance.
  */
 const CONFIG = {
   // ===========================================================================
@@ -54,7 +54,7 @@ const CONFIG = {
   STATUS_AUTHORISED: "Authorised",
   STATUS_EDITED: "Authorised (edited)",
 
-  // Maps status strings to hex colors for tab visual indicators
+  // Maps status strings to hex colours for tab visual indicators
   STATUS_COLORS: {
     'Incomplete': '#bdbdbd',            // Grey
     'Pending authorisation': '#4285f4', // Blue
@@ -91,5 +91,15 @@ const CONFIG = {
   SUMMARY_KEY_DOCS: "trip_linkedDocs",
 
   // Delimiter for multiple links. Use "\n" for new line.
-  SUMMARY_DOCS_DELIMITER: "\n"
+  SUMMARY_DOCS_DELIMITER: "\n",
+
+  // ===========================================================================
+  // 8. SYSTEM TOGGLES & FEATURE FLAGS
+  // ===========================================================================
+  // Master toggle controlling whether new trip sheets can be initiated.
+  // Set to false during maintenance periods or term breaks to prevent new additions.
+  ALLOW_NEW_TRIPS: true,
+
+  // User-facing message presented when a user attempts creation whilst suspended.
+  TRIP_CREATION_SUSPENDED_MESSAGE: "New trip creation is currently suspended. Please contact the system administrator or SLT if you require an exception."
 };

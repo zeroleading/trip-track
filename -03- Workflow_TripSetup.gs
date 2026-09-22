@@ -1,27 +1,44 @@
 /**
  * WORKFLOW SETUP
  * Handles the creation of new trips and navigation.
- * updated: Integrates Master Template "0000T00", Protection copying, and Reference List logic.
+ * Updated: Incorporates master switch guard clause, master template protection cloning, and index ordering.
  */
 
 /**
  * Initiates the process of adding a new school trip.
- * This is the function called by the "Add new trip" menu item.
+ * Validates system availability and prior approval before cloning the master template sheet.
+ * Called directly via the "Add new trip" custom menu trigger.
+ * 
+ * @returns {void}
  */
 function addTrip() {
   const ui = SpreadsheetApp.getUi();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
+  // 0. Master Switch Guard Clause
+  // Evaluate the master switch before executing any sheet operations or prompting the user.
+  // This cleanly halts execution with a polite explanation if submissions are suspended.
+  if (!CONFIG.ALLOW_NEW_TRIPS) {
+    ui.alert(
+      'Trip Creation Suspended',
+      CONFIG.TRIP_CREATION_SUSPENDED_MESSAGE || 'Trip creation is currently suspended.',
+      ui.ButtonSet.OK
+    );
+    return;
+  }
+
   // 1. Get the template sheet and its primary protection.
-  const templateSheet = ss.getSheetByName('0000T00');
+  // Leveraging CONFIG.TEMPLATE_SHEET_NAME ensures alignment with central settings.
+  const templateSheetName = CONFIG.TEMPLATE_SHEET_NAME || '0000T00';
+  const templateSheet = ss.getSheetByName(templateSheetName);
   if (!templateSheet) {
-    ui.alert('Error', 'Template sheet "0000T00" not found. Please ensure it exists.', ui.ButtonSet.OK);
+    ui.alert('Error', `Template sheet "${templateSheetName}" not found. Please ensure it exists.`, ui.ButtonSet.OK);
     return;
   }
   
   const templateSheetProtection = templateSheet.getProtections(SpreadsheetApp.ProtectionType.SHEET)[0];
   if (!templateSheetProtection) {
-    ui.alert('Error', 'No sheet protection found on the template sheet "0000T00". Please add protection to the template.', ui.ButtonSet.OK);
+    ui.alert('Error', `No sheet protection found on the template sheet "${templateSheetName}". Please add protection to the template.`, ui.ButtonSet.OK);
     return;
   }
 
@@ -31,7 +48,7 @@ function addTrip() {
     ui.ButtonSet.YES_NO
   );
 
-  if(tripBeenAgreed !== ui.Button.YES){
+  if (tripBeenAgreed !== ui.Button.YES) {
     ui.alert('Please seek approval for your trip from SLT before continuing');
     return;
   } 
@@ -55,65 +72,62 @@ function addTrip() {
   }
 
   // 4. Generate and add new reference number.
-  // Note: Assumes generateAndAddReferenceNumber() exists in your project
   const generatedTripReference = generateAndAddReferenceNumber();
   if (!generatedTripReference) {
-    return; // Error was already handled in the helper
+    return; // Error handling already managed inside generateAndAddReferenceNumber
   }
 
   // 5. Create new sheet
   const newTripSheet = templateSheet.copyTo(ss).setName(generatedTripReference);
 
-  // --- ADDED: Move Sheet Logic ---
-  // Moves the new sheet to index immediately following the Menu sheet
+  // Position new sheet directly adjacent to the primary Menu dashboard
   const menuSheet = ss.getSheetByName(CONFIG.MENU_SHEET_NAME);
   if (menuSheet) {
     newTripSheet.activate();
     ss.moveActiveSheet(menuSheet.getIndex() + 1);
   }
-  // -------------------------------
 
   let newTripSheetProtection = newTripSheet.protect();
 
-  // 6. Populate data
-  // Note: These Named Ranges must exist inside the Template sheet
+  // 6. Populate data into template named ranges
   newTripSheet.getRange('thisTrip_tripName').setValue(newTripName);
   newTripSheet.getRange('thisTrip_tripRef').setValue(generatedTripReference);
 
   newTripSheet.showSheet();
   newTripSheet.activate();
 
-  // 7. Copy protection properties
+  // 7. Replicate protection properties
   newTripSheetProtection.setDescription(templateSheetProtection.getDescription());
   newTripSheetProtection.setWarningOnly(templateSheetProtection.isWarningOnly());
 
-  // Get unprotected ranges from template and map them to the new sheet
+  // Map unprotected ranges from template onto the newly created sheet
   const unprotectedTemplateRangesA1 = templateSheetProtection.getUnprotectedRanges().map(range => range.getA1Notation());
   newTripSheetProtection.setUnprotectedRanges(unprotectedTemplateRangesA1.map(a1 => newTripSheet.getRange(a1)));
 
-  // 8. Final UX
+  // 8. Final User Experience
   newTripSheet.getRange(10, 4).activateAsCurrentCell(); // Focus on cell D10
 
   ui.alert('Trip Created', `New trip "${newTripName}" with reference "${generatedTripReference}" has been successfully created!`, ui.ButtonSet.OK);
-  ui.alert('Trip Created','Enter data in all fields marked "*" and add students below before sending for authorisation.', ui.ButtonSet.OK);
+  ui.alert('Trip Created', 'Enter data in all fields marked "*" and add students below before sending for authorisation.', ui.ButtonSet.OK);
 
-  // 9. Logging
+  // 9. Audit Logging
   if (typeof logToSystem === 'function') {
     logToSystem("Trip Created", generatedTripReference, `Name: ${newTripName}`);
   }
 }
 
-
 /**
- * Generates a new reference number (e.g., 2511T01) and adds it to the 'referenceList'.
+ * Generates a new reference number (e.g., 2511T01) and appends it to the 'referenceList'.
+ * Inspects existing entries matching the YYMMT pattern to allocate the next sequential increment.
+ * 
  * @returns {string|null} The newly generated reference number, or null if an error occurred.
  */
 function generateAndAddReferenceNumber() {
   const ui = SpreadsheetApp.getUi();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const referenceListNamedRangeName = 'referenceList';
+  const referenceListNamedRangeName = CONFIG.REFERENCE_LIST_RANGE_NAME || 'referenceList';
 
-  // Get the current date in YYMM format
+  // Format current date in YYMM format within the London timezone
   const currentDate = new Date();
   const datePrefixYYMM = Utilities.formatDate(currentDate, 'Europe/London', 'yyMM'); // e.g., "2511"
 
@@ -124,17 +138,16 @@ function generateAndAddReferenceNumber() {
       throw new Error(`Named range '${referenceListNamedRangeName}' not found.`);
     }
   } catch (e) {
-    Logger.log(e.message + " Please ensure the named range 'referenceList' exists.");
-    ui.alert('Error', e.message + "\nPlease ensure the named range 'referenceList' exists.", ui.ButtonSet.OK);
-    return null; // Return null to indicate failure.
+    Logger.log(e.message + " Please ensure the named range exists.");
+    ui.alert('Error', e.message + "\nPlease ensure the named range exists.", ui.ButtonSet.OK);
+    return null;
   }
 
-  // Get all existing references
+  // Retrieve existing references
   const existingReferencesList = referenceListNamedRange.getValues().flat().filter(String);
 
-  // Determine the next increment
+  // Determine highest existing increment matching current month prefix
   let currentMaxIncrement = 0;
-  // Regex: Starts with YYMMT, ends with 2 digits
   const referenceNumberRegex = new RegExp(`^${datePrefixYYMM}T(\\d{2})$`);
 
   existingReferencesList.forEach(ref => {
@@ -151,11 +164,9 @@ function generateAndAddReferenceNumber() {
   const newGeneratedReference = `${datePrefixYYMM}T${nextReferenceIncrement}`;
   Logger.log(`Generated new reference: ${newGeneratedReference}`);
 
-  // Add the new reference to the next empty row
+  // Append new reference to next vacant row in designated range sheet
   const targetSheetForReference = referenceListNamedRange.getSheet();
   const referenceListColumn = referenceListNamedRange.getColumn();
-  
-  // Note: This appends to the bottom of the sheet based on data presence
   const nextEmptyRowInReferenceList = targetSheetForReference.getLastRow() + 1; 
 
   targetSheetForReference.getRange(nextEmptyRowInReferenceList, referenceListColumn).setValue(newGeneratedReference);
