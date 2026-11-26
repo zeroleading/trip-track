@@ -15,6 +15,7 @@ function onOpen(e) {
     .addItem('1. Request Authorisation', 'requestAuthorisation')
     .addItem('2. Approve This Trip (SLT)', 'approveTripWorkflow')
     .addItem('3. Deny This Trip (SLT)', 'denyTripWorkflow')
+    .addItem('Revert Trip to Incomplete', 'revertToIncomplete')
     .addSeparator()
     .addItem('Add documents to this trip', 'openDocPicker') 
     .addItem('Manage linked documents for this trip', 'openLinkManager') // ADDED ITEM

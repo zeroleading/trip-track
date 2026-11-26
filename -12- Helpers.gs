@@ -218,6 +218,48 @@ function logToSystem(action, tripRef, details = "") {
 }
 
 /**
+ * Moves and renames any existing Archive spreadsheets for a trip into a "Superseded" subfolder
+ * so that re-approval creates a clean new active archive without query collisions.
+ * @param {GoogleAppsScript.Drive.Folder} archiveFolder - The main archive folder.
+ * @param {string} tripRef - The trip reference (e.g., "2511T01").
+ */
+function supersedeExistingArchives(archiveFolder, tripRef) {
+  const safeRef = tripRef.replace(/'/g, "\\'");
+  const existingFiles = archiveFolder.searchFiles(
+    `title contains '${safeRef}A' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`
+  );
+
+  if (!existingFiles.hasNext()) return;
+
+  const folders = archiveFolder.getFoldersByName('Superseded');
+  const supersededFolder = folders.hasNext() ? folders.next() : archiveFolder.createFolder('Superseded');
+  const userEmail = Session.getActiveUser().getEmail();
+
+  while (existingFiles.hasNext()) {
+    const file = existingFiles.next();
+
+    try {
+      const oldArchiveSS = SpreadsheetApp.openById(file.getId());
+      const oldLogSheet = oldArchiveSS.getSheetByName(CONFIG.SHEET_LOG);
+      if (oldLogSheet) {
+        oldLogSheet.appendRow([new Date(), userEmail, "System", "-", "Archive Superseded (Trip re-approved)"]);
+      }
+    } catch (logErr) {
+      console.warn(`Could not append supersession note to old archive ${file.getName()}: ${logErr.message}`);
+    }
+
+    const oldName = file.getName();
+    const newName = oldName.includes(`${tripRef}A`)
+      ? oldName.replace(`${tripRef}A`, `${tripRef}_SUPERSEDED`)
+      : `[SUPERSEDED] ${oldName}`;
+    file.setName(newName);
+    file.moveTo(supersededFolder);
+
+    console.log(`Superseded previous archive "${oldName}" -> "${newName}"`);
+  }
+}
+
+/**
  * Creates the Archive using the Drive Template.
  * Copies data from the active trip sheet into the specific template tabs.
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sourceSheet - The active trip sheet.
@@ -229,6 +271,9 @@ function createArchiveFromTemplate(sourceSheet, tripRef, tripName) {
   // 1. Setup Files & Folders
   const archiveFolder = DriveApp.getFolderById(CONFIG.FOLDER_ID_ARCHIVE);
   const templateFile = DriveApp.getFileById(CONFIG.ARCHIVE_TEMPLATE_ID);
+
+  // Supersede any previous archive for this trip before creating the new snapshot
+  supersedeExistingArchives(archiveFolder, tripRef);
   
   const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
   

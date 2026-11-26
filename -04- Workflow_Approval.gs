@@ -276,3 +276,175 @@ function denyTripWorkflow() {
     ui.alert('An Error Occurred', `The process failed. Error: ${e.message}`, ui.ButtonSet.OK);
   }
 }
+
+/**
+ * 4. USER: Revert Trip to Incomplete
+ * Reverts a trip that has moved past "Incomplete" back to "Incomplete"
+ * so it can be edited and re-submitted for authorisation.
+ * Notifies SLT and officers only if they have already been notified of the trip,
+ * notifies and prompts the trip leader to edit if they are not the reverter,
+ * and clears sent notification timestamps so scheduled emails can re-run after re-approval.
+ * Called from the 'Trip Admin' menu.
+ *
+ * @returns {void}
+ */
+function revertToIncomplete() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getActiveSheet();
+
+  // 1. Validate Active Sheet
+  const validSheetPattern = /^\d{4}T\d{2}$/;
+  if (!validSheetPattern.test(sheet.getName())) {
+    ui.alert('Invalid Sheet', 'Please run this from a valid Trip Sheet.', ui.ButtonSet.OK);
+    return;
+  }
+
+  const tripData = getSummaryData(sheet);
+  if (!tripData) {
+    console.warn('revertToIncomplete stopped because tripData was null.');
+    return;
+  }
+
+  // 2. Status Check
+  const status = tripData.trip_status;
+  if (status === 'Incomplete') {
+    ui.alert('Action Stopped', 'This trip is already set to "Incomplete".', ui.ButtonSet.OK);
+    return;
+  }
+
+  // 3. Determine which stakeholders have already been notified
+  const activeUserEmail = Session.getActiveUser().getEmail().trim();
+  const leadEmail = tripData.trip_leadEmail ? String(tripData.trip_leadEmail).trim() : '';
+  const shouldNotifyLeader = Boolean(
+    leadEmail && leadEmail.includes('@') && leadEmail.toLowerCase() !== activeUserEmail.toLowerCase()
+  );
+
+  const isAuthorised = (status === CONFIG.STATUS_AUTHORISED || status === CONFIG.STATUS_EDITED);
+  const sltWasNotified = (status === 'Pending authorisation' || isAuthorised);
+  const attendanceNotified = Boolean(tripData.trip_sentOpsAttendance || tripData.trip_sentDeparture);
+  const coverNotified = Boolean(tripData.trip_sentOpsCover);
+
+  const recipients = [];
+  if (sltWasNotified) {
+    const sltEmail = tripData.trip_authorisedBy || sheet.getRange(CONFIG.SLT_SELECTED_RANGE_NAME).getValue();
+    if (sltEmail && String(sltEmail).includes('@')) {
+      recipients.push(String(sltEmail).trim());
+    }
+  }
+  if (attendanceNotified && typeof getOfficerEmails === 'function') {
+    recipients.push(...getOfficerEmails(CONFIG.RANGE_OFFICERS_ATTENDANCE));
+  }
+  if (coverNotified && typeof getOfficerEmails === 'function') {
+    recipients.push(...getOfficerEmails(CONFIG.RANGE_OFFICERS_COVER));
+  }
+
+  const uniqueRecipients = [...new Set(recipients)];
+
+  // 4. Confirmation
+  let confirmMsg = isAuthorised
+    ? `This trip's current status is "${status}". Reverting it to "Incomplete" will clear the current authorisation details and require re-approval before the trip can run.\n\n(Any existing Archive snapshot will remain in Drive.)`
+    : `This trip's current status is "${status}". Are you sure you want to revert it to "Incomplete" for editing and re-approval?`;
+
+  if (uniqueRecipients.length > 0) {
+    confirmMsg += `\n\nThe following previously notified contacts will be informed that trip details are changing:\n${uniqueRecipients.join(', ')}`;
+  }
+  if (shouldNotifyLeader) {
+    confirmMsg += `\n\nThe trip leader (${leadEmail}) will be notified and prompted to edit the sheet.`;
+  }
+  if (isAuthorised) confirmMsg += '\n\nProceed?';
+
+  const response = ui.alert('Confirm Revert to Incomplete', confirmMsg, ui.ButtonSet.YES_NO);
+  if (response !== ui.Button.YES) return;
+
+  try {
+    // 5. Revert Status, Clear Authorisation Metadata & Notification Timestamps
+    updateSummaryValue(sheet, 'trip_status', 'Incomplete');
+
+    if (tripData.trip_authorisedBy) {
+      updateSummaryValue(sheet, 'trip_authorisedBy', '');
+    }
+    if (tripData.trip_authorisationDate) {
+      updateSummaryValue(sheet, 'trip_authorisationDate', '');
+    }
+
+    const sentKeys = [
+      'trip_sentLockIn',
+      'trip_sentOpsAttendance',
+      'trip_sentOpsCover',
+      'trip_sentLeaderPack',
+      'trip_sentDeparture',
+      'trip_sentEvaluation'
+    ];
+    sentKeys.forEach(key => {
+      if (tripData[key + '_cellA1']) {
+        updateSummaryValue(sheet, key, '');
+      }
+    });
+
+    const sheetUrl = `${ss.getUrl()}#gid=${sheet.getSheetId()}`;
+    const tripDateStr = tripData.trip_date instanceof Date
+      ? Utilities.formatDate(tripData.trip_date, Session.getScriptTimeZone(), 'dd/MM/yyyy')
+      : String(tripData.trip_date || 'Date Not Set');
+
+    // 6. Notify previously informed SLT and Officers
+    if (uniqueRecipients.length > 0) {
+      const subject = `Trip Details Changing (Reverted to Incomplete): ${tripData.trip_name} (${tripData.trip_ref})`;
+      const body = `
+        <p>Hello,</p>
+        <p>Please note that the following trip has been reverted from <b>"${status}"</b> to <b>"Incomplete"</b> by ${activeUserEmail} because trip information is changing and will require re-approval:</p>
+        <table style="border-collapse: collapse; width: 100%; max-width: 600px;">
+          <tr><td style="padding: 5px; font-weight: bold;">Trip Name:</td><td style="padding: 5px;">${tripData.trip_name}</td></tr>
+          <tr><td style="padding: 5px; font-weight: bold;">Reference:</td><td style="padding: 5px;">${tripData.trip_ref}</td></tr>
+          <tr><td style="padding: 5px; font-weight: bold;">Leader:</td><td style="padding: 5px;">${tripData.trip_leadName}</td></tr>
+          <tr><td style="padding: 5px; font-weight: bold;">Date:</td><td style="padding: 5px;">${tripDateStr}</td></tr>
+        </table>
+        <p>You will receive updated details once the trip has been edited and re-approved.</p>
+        <p><b><a href="${sheetUrl}" style="font-size: 16px;">Open Trip Spreadsheet</a></b></p>
+      `;
+
+      MailApp.sendEmail({
+        to: uniqueRecipients.join(','),
+        bcc: CONFIG.SYSTEM_ADMIN_BCC,
+        subject: subject,
+        htmlBody: body
+      });
+    }
+
+    // 7. Notify Trip Leader (if not the reverter) and prompt them to edit
+    if (shouldNotifyLeader) {
+      const leaderSubject = `ACTION REQUIRED: Trip Reverted to Incomplete - ${tripData.trip_name} (${tripData.trip_ref})`;
+      const leaderBody = `
+        <p>Hello ${tripData.trip_leadName || ''},</p>
+        <p>Your trip <b>${tripData.trip_name} (${tripData.trip_ref})</b> has been reverted from <b>"${status}"</b> to <b>"Incomplete"</b> by ${activeUserEmail}.</p>
+        <p>Please open the trip sheet, make the required edits, and re-submit for authorisation via <b>Trip Admin &gt; 1. Request Authorisation</b> when ready.</p>
+        <p><b><a href="${sheetUrl}" style="font-size: 16px;">Open Trip Spreadsheet</a></b></p>
+      `;
+
+      MailApp.sendEmail({
+        to: leadEmail,
+        bcc: CONFIG.SYSTEM_ADMIN_BCC,
+        subject: leaderSubject,
+        htmlBody: leaderBody
+      });
+    }
+
+    const notifiedAll = [...uniqueRecipients];
+    if (shouldNotifyLeader) notifiedAll.push(leadEmail);
+
+    console.log(`Reverted ${tripData.trip_ref} from "${status}" to "Incomplete". Notified: ${notifiedAll.length}`);
+    const doneMsg = notifiedAll.length > 0
+      ? `Trip "${tripData.trip_ref}" has been reverted to "Incomplete" and notifications were sent to: ${notifiedAll.join(', ')}.`
+      : `Trip "${tripData.trip_ref}" has been reverted to "Incomplete". You can now edit the sheet and re-submit for authorisation when ready.`;
+    ui.alert('Status Reverted', doneMsg, ui.ButtonSet.OK);
+
+    // 8. Audit Logging
+    const logDetails = notifiedAll.length > 0
+      ? `Previous status: ${status} | Notified: ${notifiedAll.join(', ')}`
+      : `Previous status: ${status}`;
+    logToSystem('Reverted to Incomplete', tripData.trip_ref, logDetails);
+  } catch (e) {
+    console.error(e);
+    ui.alert('An Error Occurred', `Could not revert trip status. Error: ${e.message}`, ui.ButtonSet.OK);
+  }
+}
